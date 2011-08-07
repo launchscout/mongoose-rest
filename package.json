@@ -3,7 +3,7 @@
   "name": "mongoose-rest",
   "description": "RESTful, resource-based routes for Mongoose",
   "homepage": "http://github.com/chriso/mongoose-rest",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "engines": {
     "node": ">= 0.4.0"
   },
