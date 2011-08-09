@@ -108,7 +108,453 @@ code .this { color: #19469D; }</style>
 		</script>
 	</head>
 	<body>
-<table id="source"><tbody><tr><td><h1>mongoose-rest</h1></td><td></td></tr><tr class="filename"><td><h2 id="lib/request.js"><a href="#">request</a></h2></td><td>lib/request.js</td></tr><tr class="code">
+<table id="source"><tbody><tr><td><h1>mongoose-rest</h1></td><td></td></tr><tr class="filename"><td><h2 id="lib/rest.js"><a href="#">rest</a></h2></td><td>lib/rest.js</td></tr><tr class="code">
+<td class="docs">
+<p>Module dependencies.
+ </p>
+</td>
+<td class="code">
+<pre><code><span class="keyword">var</span> <span class="variable">models</span> = <span class="variable">require</span>(<span class="string">'./models'</span>)
+  , <span class="variable">lingo</span> = <span class="variable">require</span>(<span class="string">'lingo'</span>).<span class="variable">en</span>;</code></pre>
+</td>
+</tr>
+<tr class="code">
+<td class="docs">
+<p>The MongoDB ID format.
+ </p>
+</td>
+<td class="code">
+<pre><code><span class="keyword">var</span> <span class="variable">id_format</span> = <span class="regexp">/^[0-9a-f]{24}$/</span>;</code></pre>
+</td>
+</tr>
+<tr class="code">
+<td class="docs">
+<p>Add RESTful routes.</p>
+
+<h2></h2>
+
+<ul><li><p><strong>param</strong>: <em>HTTPServer</em>  app</p></li><li><p><strong>param</strong>: <em>object</em>  routes</p></li><li><p><strong>param</strong>: <em>string</em>  prefix</p></li><li><p><strong>param</strong>: <em>string</em>  singular</p></li><li><p><strong>api</strong>: <em>private</em></p></li></ul>
+</td>
+<td class="code">
+<pre><code><span class="keyword">function</span> <span class="variable">addRoutes</span> (<span class="variable">app</span>, <span class="variable">routes</span>, <span class="variable">prefix</span>, <span class="variable">singular</span>) {
+    <span class="variable">app</span>.<span class="variable">get</span>    ( <span class="variable">prefix</span> + <span class="string">'.:format?'</span>                   , <span class="variable">routes</span>.<span class="variable">index</span>  );
+    <span class="variable">app</span>.<span class="variable">post</span>   ( <span class="variable">prefix</span>                                 , <span class="variable">routes</span>.<span class="variable">create</span> );
+    <span class="variable">app</span>.<span class="variable">get</span>    ( <span class="variable">prefix</span> + <span class="string">'/:'</span> + <span class="variable">singular</span> + <span class="string">'.:format?'</span> , <span class="variable">routes</span>.<span class="variable">read</span>   );
+    <span class="variable">app</span>.<span class="variable">put</span>    ( <span class="variable">prefix</span> + <span class="string">'/:'</span> + <span class="variable">singular</span>               , <span class="variable">routes</span>.<span class="variable">update</span> );
+    <span class="variable">app</span>.<span class="keyword">delete</span> ( <span class="variable">prefix</span> + <span class="string">'/:'</span> + <span class="variable">singular</span>               , <span class="variable">routes</span>.<span class="variable">destroy</span>);
+}</code></pre>
+</td>
+</tr>
+<tr class="code">
+<td class="docs">
+<p>Create resource-based, RESTful routes for mongoose models.
+All models must be defined before calling this method.</p>
+
+<h2></h2>
+
+<ul><li><p><strong>param</strong>: <em>HTTPServer</em>  app</p></li><li><p><strong>param</strong>: <em>object</em>  config (optional)</p></li><li><p><strong>api</strong>: <em>public</em></p></li></ul>
+</td>
+<td class="code">
+<pre><code><span class="variable">exports</span>.<span class="variable">create</span> = <span class="keyword">function</span> (<span class="variable">app</span>, <span class="variable">config</span>) {
+    <span class="variable">config</span> = <span class="variable">config</span> || {};
+
+    <span class="comment">//Set config defaults</span>
+    <span class="variable">config</span>.<span class="variable">default_limit</span> = <span class="variable">config</span>.<span class="variable">default_limit</span> || <span class="number integer">20</span>
+    <span class="variable">config</span>.<span class="variable">max_limit</span> = <span class="variable">config</span>.<span class="variable">max_limit</span> || <span class="number integer">100</span>;
+
+    <span class="comment">//Add routes for each top level model</span>
+    <span class="variable">models</span>.<span class="variable">getTopLevel</span>().<span class="variable">forEach</span>(<span class="keyword">function</span> (<span class="variable">resource</span>) {
+
+        <span class="keyword">var</span> <span class="variable">singular</span> = <span class="variable">lingo</span>.<span class="variable">singularize</span>(<span class="variable">resource</span>)
+          , <span class="variable">plural</span> = <span class="variable">lingo</span>.<span class="variable">pluralize</span>(<span class="variable">resource</span>)
+          , <span class="variable">top_prefix</span> = (<span class="variable">config</span>.<span class="variable">path</span> || <span class="string">'/'</span>) + <span class="variable">plural</span>
+          , <span class="variable">routes</span>;
+
+        <span class="comment">//Autoload a resource when the param is part of a route</span>
+        <span class="variable">autoloadTopLevelResource</span>(<span class="variable">app</span>, <span class="variable">resource</span>, <span class="variable">config</span>);
+
+        <span class="comment">//Add RESTful routes</span>
+        <span class="variable">routes</span> = <span class="variable">topLevelRoutes</span>(<span class="variable">app</span>, <span class="variable">top_prefix</span>, <span class="variable">resource</span>, <span class="variable">config</span>);
+
+        <span class="variable">addRoutes</span>(<span class="variable">app</span>, <span class="variable">routes</span>, <span class="variable">top_prefix</span>, <span class="variable">singular</span>);
+
+        <span class="comment">//Add routes for embedded documents</span>
+        <span class="variable">models</span>.<span class="variable">getChildren</span>(<span class="variable">resource</span>).<span class="variable">forEach</span>(<span class="keyword">function</span> (<span class="variable">embedded</span>) {
+
+            <span class="keyword">var</span> <span class="variable">prefix</span> = <span class="variable">top_prefix</span> + <span class="string">'/:'</span> + <span class="variable">singular</span>;
+
+            <span class="variable">autoloadEmbeddedResource</span>(<span class="variable">app</span>, <span class="variable">resource</span>,
+                <span class="variable">embedded</span>.<span class="variable">resource</span>, <span class="variable">embedded</span>.<span class="variable">attribute</span>, <span class="variable">config</span>);
+
+            <span class="variable">routes</span> = <span class="variable">embeddedRoutes</span>(<span class="variable">app</span>, <span class="variable">prefix</span>, <span class="variable">resource</span>, <span class="variable">embedded</span>.<span class="variable">resource</span>,
+                                        <span class="variable">embedded</span>.<span class="variable">attribute</span>);
+
+            <span class="variable">addRoutes</span>(<span class="variable">app</span>, <span class="variable">routes</span>, <span class="variable">prefix</span> + <span class="string">'/'</span> + <span class="variable">embedded</span>.<span class="variable">plural</span>, <span class="variable">embedded</span>.<span class="variable">singular</span>);
+
+        });
+
+    });
+
+    <span class="variable">app</span>.<span class="variable">dynamicHelpers</span>({<span class="variable">resource</span>: <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>) {
+        <span class="keyword">return</span> <span class="variable">request</span>.<span class="variable">resource</span>;
+    }});
+}</code></pre>
+</td>
+</tr>
+<tr class="code">
+<td class="docs">
+<p>Autoload a resource when a route contains it as a parameter, e.g.
+/posts/:post will automatically load the requested post, where :post
+is either an ID or unique slug, e.g. /posts/my-test-post or /posts/23</p>
+
+<h2></h2>
+
+<ul><li><p><strong>param</strong>: <em>HTTPServer</em>  app</p></li><li><p><strong>param</strong>: <em>string</em>  resource</p></li><li><p><strong>param</strong>: <em>object</em>  config (optional)</p></li><li><p><strong>api</strong>: <em>private</em></p></li></ul>
+</td>
+<td class="code">
+<pre><code><span class="keyword">function</span> <span class="variable">autoloadTopLevelResource</span> (<span class="variable">app</span>, <span class="variable">resource</span>, <span class="variable">config</span>) {
+    <span class="keyword">var</span> <span class="variable">model</span> = <span class="variable">models</span>.<span class="variable">mongoose</span>.<span class="variable">model</span>(<span class="variable">resource</span>)
+      , <span class="variable">singular</span> = <span class="variable">lingo</span>.<span class="variable">singularize</span>(<span class="variable">resource</span>);
+
+    <span class="variable">app</span>.<span class="variable">param</span>(<span class="variable">singular</span>, <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
+        <span class="keyword">var</span> <span class="variable">id</span> = <span class="variable">request</span>.<span class="variable">params</span>[<span class="variable">singular</span>];
+
+        <span class="keyword">function</span> <span class="variable">handleResource</span> (<span class="variable">err</span>, <span class="variable">obj</span>) {
+            <span class="keyword">if</span> (<span class="variable">err</span>) {
+                <span class="keyword">return</span> <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="variable">err</span>));
+            } <span class="keyword">else</span> <span class="keyword">if</span> (<span class="keyword">null</span> == <span class="variable">obj</span>) {
+                <span class="keyword">if</span> (<span class="variable">request</span>.<span class="variable">xhr</span> || <span class="variable">request</span>.<span class="variable">format</span>) {
+                    <span class="variable">response</span>.<span class="variable">send</span>(<span class="number integer">404</span>);
+                } <span class="keyword">else</span> {
+                    <span class="variable">request</span>.<span class="variable">flash</span>(<span class="string">'error'</span>, <span class="string">'The %s could not be found.'</span>, <span class="variable">singular</span>);
+                    <span class="variable">response</span>.<span class="variable">redirect</span>(<span class="string">'back'</span>);
+                }
+            } <span class="keyword">else</span> {
+                <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>, <span class="variable">obj</span>);
+                <span class="variable">next</span>();
+            }
+        }
+
+        <span class="comment">//Is there a unique slug attribute we can lookup by? If not, lookup by ID</span>
+        <span class="keyword">if</span> (<span class="variable">model</span>.<span class="variable">schema</span>.<span class="variable">tree</span>.<span class="variable">slug</span> &<span class="variable">amp</span>;&<span class="variable">amp</span>; !<span class="variable">id_format</span>.<span class="variable">test</span>(<span class="variable">id</span>)) {
+            <span class="variable">model</span>.<span class="variable">findOne</span>({<span class="variable">slug</span>: <span class="variable">id</span>}, <span class="variable">handleResource</span>);
+        } <span class="keyword">else</span> {
+            <span class="variable">model</span>.<span class="variable">findById</span>(<span class="variable">id</span>, <span class="variable">handleResource</span>);
+        }
+    });
+}</code></pre>
+</td>
+</tr>
+<tr class="code">
+<td class="docs">
+<p>Autoload an embedded resource when a route contains it as a parameter, e.g.
+/posts/:post/commments/:comment will automatically load the requested
+comment (assuming the post has already been loaded).</p>
+
+<h2></h2>
+
+<ul><li><p><strong>param</strong>: <em>HTTPServer</em>  app</p></li><li><p><strong>param</strong>: <em>string</em>  parent</p></li><li><p><strong>param</strong>: <em>string</em>  resource</p></li><li><p><strong>param</strong>: <em>string</em>  attribute - the attribute name of the embedded resource</p></li><li><p><strong>param</strong>: <em>object</em>  config (optional)</p></li><li><p><strong>api</strong>: <em>private</em></p></li></ul>
+</td>
+<td class="code">
+<pre><code><span class="keyword">function</span> <span class="variable">autoloadEmbeddedResource</span> (<span class="variable">app</span>, <span class="variable">parent</span>, <span class="variable">resource</span>, <span class="variable">attribute</span>, <span class="variable">config</span>) {
+    <span class="keyword">var</span> <span class="variable">model</span> = <span class="variable">models</span>.<span class="variable">mongoose</span>.<span class="variable">model</span>(<span class="variable">resource</span>)
+      , <span class="variable">singular</span> = <span class="variable">lingo</span>.<span class="variable">singularize</span>(<span class="variable">resource</span>)
+      , <span class="variable">parent_singular</span> = <span class="variable">lingo</span>.<span class="variable">singularize</span>(<span class="variable">parent</span>);
+
+    <span class="variable">app</span>.<span class="variable">param</span>(<span class="variable">singular</span>, <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
+        <span class="keyword">var</span> <span class="variable">parent</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">parent_singular</span>)
+          , <span class="variable">id</span> = <span class="variable">request</span>.<span class="variable">params</span>[<span class="variable">singular</span>];
+        <span class="keyword">if</span> (<span class="variable">parent</span> &<span class="variable">amp</span>;&<span class="variable">amp</span>; <span class="variable">attribute</span> <span class="keyword">in</span> <span class="variable">parent</span>) {
+            <span class="variable">parent</span>[<span class="variable">attribute</span>].<span class="variable">forEach</span>(<span class="keyword">function</span> (<span class="variable">child</span>) {
+                <span class="keyword">if</span> (<span class="variable">child</span>.<span class="variable">get</span>(<span class="string">'id'</span>) == <span class="variable">id</span>) {
+                    <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>, <span class="variable">child</span>);
+                    <span class="keyword">return</span> <span class="variable">next</span>();
+                }
+            });
+        } <span class="keyword">else</span> <span class="keyword">if</span> (<span class="variable">request</span>.<span class="variable">xhr</span> || <span class="variable">request</span>.<span class="variable">format</span>) {
+            <span class="variable">response</span>.<span class="variable">send</span>([]);
+        } <span class="keyword">else</span> {
+            <span class="variable">request</span>.<span class="variable">flash</span>(<span class="string">'error'</span>, <span class="string">'The %s could not be found.'</span>, <span class="variable">singular</span>);
+            <span class="variable">response</span>.<span class="variable">redirect</span>(<span class="string">'back'</span>);
+        }
+    });
+}</code></pre>
+</td>
+</tr>
+<tr class="code">
+<td class="docs">
+<p>Generate routes for top level models.</p>
+
+<h2></h2>
+
+<ul><li><p><strong>param</strong>: <em>HTTPServer</em>  app</p></li><li><p><strong>param</strong>: <em>string</em>  resource</p></li><li><p><strong>param</strong>: <em>object</em>  config (optional)</p></li><li><p><strong>return</strong>: <em>object</em>  routes</p></li><li><p><strong>api</strong>: <em>private</em></p></li></ul>
+</td>
+<td class="code">
+<pre><code><span class="keyword">function</span> <span class="variable">topLevelRoutes</span> (<span class="variable">app</span>, <span class="variable">prefix</span>, <span class="variable">resource</span>, <span class="variable">config</span>) {
+
+    <span class="keyword">var</span> <span class="variable">model</span> = <span class="variable">models</span>.<span class="variable">mongoose</span>.<span class="variable">model</span>(<span class="variable">resource</span>)
+      , <span class="variable">singular</span> = <span class="variable">lingo</span>.<span class="variable">singularize</span>(<span class="variable">resource</span>)
+      , <span class="variable">plural</span> = <span class="variable">lingo</span>.<span class="variable">pluralize</span>(<span class="variable">resource</span>)
+      , <span class="variable">routes</span> = {};
+
+    <span class="comment">//GET /&lt;resource&gt;</span>
+    <span class="variable">routes</span>.<span class="variable">index</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
+        <span class="keyword">var</span> <span class="variable">page</span> = <span class="variable">request</span>.<span class="variable">query</span>.<span class="variable">page</span> || <span class="number integer">1</span>
+          , <span class="variable">limit</span> = <span class="class">Math</span>.<span class="variable">min</span>(<span class="variable">config</span>.<span class="variable">max_limit</span>, <span class="variable">request</span>.<span class="variable">query</span>.<span class="variable">limit</span>
+                                                   || <span class="variable">config</span>.<span class="variable">default_limit</span>)
+          , <span class="variable">offset</span> = (<span class="variable">page</span> - <span class="number integer">1</span>) * <span class="variable">limit</span>
+          , <span class="variable">locals</span> = {}
+          , <span class="variable">query</span>;
+
+        <span class="keyword">function</span> <span class="variable">doQuery</span>(<span class="variable">query</span>) {
+            <span class="variable">query</span>.<span class="variable">skip</span>(<span class="variable">offset</span>).<span class="variable">limit</span>(<span class="variable">limit</span>).<span class="variable">run</span>(<span class="keyword">function</span> (<span class="variable">err</span>, <span class="variable">results</span>) {
+                <span class="keyword">if</span> (<span class="variable">err</span>) {
+                    <span class="keyword">return</span> <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="variable">err</span>));
+                } <span class="keyword">else</span> <span class="keyword">if</span> (<span class="variable">request</span>.<span class="variable">xhr</span> || <span class="variable">request</span>.<span class="variable">format</span> === <span class="string">'json'</span>) {
+                    <span class="keyword">return</span> <span class="variable">response</span>.<span class="variable">send</span>(<span class="variable">results</span> || []);
+                }
+                <span class="keyword">var</span> <span class="variable">locals</span> = {
+                    <span class="variable">limit</span>  : <span class="variable">limit</span>
+                  , <span class="variable">page</span>   : <span class="variable">page</span>
+                  , <span class="variable">offset</span> : <span class="variable">offset</span>
+                  , <span class="variable">query</span>  : <span class="variable">request</span>.<span class="variable">query</span>
+                }
+                <span class="variable">locals</span>[<span class="variable">plural</span>] = <span class="variable">results</span> || [];
+                <span class="variable">response</span>.<span class="variable">locals</span>(<span class="variable">locals</span>);
+                <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">plural</span>, <span class="variable">results</span>);
+                <span class="variable">response</span>.<span class="variable">render</span>(<span class="variable">plural</span> + <span class="string">'/index'</span>);
+            });
+        }
+
+        <span class="comment">//Use Model.search() if it's defined</span>
+        <span class="keyword">if</span> (<span class="variable">model</span>.<span class="variable">search</span>) {
+            <span class="variable">model</span>.<span class="variable">search</span>(<span class="variable">request</span>.<span class="variable">query</span>, <span class="variable">request</span>.<span class="variable">user</span>, <span class="keyword">function</span> (<span class="variable">err</span>, <span class="variable">query</span>) {
+                <span class="keyword">if</span> (<span class="variable">err</span>) {
+                    <span class="keyword">return</span> <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="variable">err</span>));
+                }
+                <span class="variable">doQuery</span>(<span class="variable">query</span>);
+            });
+        } <span class="keyword">else</span> {
+            <span class="variable">query</span> = <span class="variable">model</span>.<span class="variable">find</span>();
+            <span class="keyword">if</span> (<span class="variable">request</span>.<span class="variable">query</span>.<span class="variable">order</span>) {
+                <span class="variable">query</span> = <span class="variable">query</span>.<span class="variable">sort</span>([[
+                    <span class="variable">request</span>.<span class="variable">query</span>.<span class="variable">order</span>, <span class="variable">request</span>.<span class="variable">query</span>.<span class="variable">desc</span> ? <span class="string">'descending'</span>
+                                                            : <span class="string">'ascending'</span>
+                ]]);
+            }
+            <span class="variable">doQuery</span>(<span class="variable">query</span>);
+        }
+    }
+
+    <span class="comment">//POST /&lt;resource&gt;</span>
+    <span class="variable">routes</span>.<span class="variable">create</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
+        <span class="keyword">var</span> <span class="variable">attr</span>, <span class="variable">instance</span> = <span class="keyword">new</span> <span class="variable">model</span>();
+        <span class="keyword">for</span> (<span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">request</span>.<span class="variable">body</span>) {
+            <span class="keyword">if</span> (!(<span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">model</span>.<span class="variable">schema</span>.<span class="variable">tree</span>)) {
+                <span class="keyword">delete</span> <span class="variable">request</span>.<span class="variable">body</span>[<span class="variable">attr</span>];
+            }
+        }
+        <span class="keyword">if</span> (<span class="variable">model</span>.<span class="variable">filter</span>) {
+            <span class="variable">request</span>.<span class="variable">body</span> = <span class="variable">model</span>.<span class="variable">filter</span>(<span class="variable">request</span>.<span class="variable">body</span>);
+        }
+        <span class="keyword">for</span> (<span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">request</span>.<span class="variable">body</span>) {
+            <span class="variable">instance</span>[<span class="variable">attr</span>] = <span class="variable">request</span>.<span class="variable">body</span>[<span class="variable">attr</span>];
+        }
+        <span class="variable">instance</span>.<span class="variable">save</span>(<span class="keyword">function</span> (<span class="variable">err</span>) {
+            <span class="keyword">if</span> (<span class="variable">err</span>) {
+                    <span class="keyword">return</span> <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="variable">err</span>));
+            } <span class="keyword">else</span> <span class="keyword">if</span> (<span class="variable">request</span>.<span class="variable">xhr</span> || <span class="variable">request</span>.<span class="variable">format</span> === <span class="string">'json'</span>) {
+                <span class="keyword">return</span> <span class="variable">response</span>.<span class="variable">send</span>(<span class="variable">instance</span>);
+            }
+            <span class="variable">request</span>.<span class="variable">flash</span>(<span class="string">'info'</span>, <span class="string">'The %s was created successfully'</span>, <span class="variable">singular</span>);
+            <span class="variable">response</span>.<span class="variable">redirect</span>(<span class="string">'/'</span> + <span class="variable">plural</span>);
+        });
+    }
+
+    <span class="comment">//GET /&lt;resource&gt;/:id</span>
+    <span class="variable">routes</span>.<span class="variable">read</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
+        <span class="keyword">if</span> (<span class="variable">request</span>.<span class="variable">xhr</span> || <span class="variable">request</span>.<span class="variable">format</span> === <span class="string">'json'</span>) {
+            <span class="keyword">return</span> <span class="variable">response</span>.<span class="variable">send</span>(<span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>).<span class="variable">toJSON</span>());
+        }
+        <span class="variable">response</span>.<span class="variable">local</span>(<span class="string">'instance'</span>, <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>));
+        <span class="variable">response</span>.<span class="variable">render</span>(<span class="variable">plural</span> + <span class="string">'/read'</span>);
+    }
+
+    <span class="comment">//PUT /&lt;resource&gt;/:id</span>
+    <span class="variable">routes</span>.<span class="variable">update</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
+        <span class="keyword">var</span> <span class="variable">attr</span>, <span class="variable">instance</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>);
+        <span class="keyword">for</span> (<span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">request</span>.<span class="variable">body</span>) {
+            <span class="keyword">if</span> (!(<span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">model</span>.<span class="variable">schema</span>.<span class="variable">tree</span>)) {
+                <span class="keyword">delete</span> <span class="variable">request</span>.<span class="variable">body</span>[<span class="variable">attr</span>];
+            }
+        }
+        <span class="keyword">if</span> (<span class="variable">model</span>.<span class="variable">filter</span>) {
+            <span class="variable">request</span>.<span class="variable">body</span> = <span class="variable">model</span>.<span class="variable">filter</span>(<span class="variable">request</span>.<span class="variable">body</span>);
+        }
+        <span class="keyword">for</span> (<span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">request</span>.<span class="variable">body</span>) {
+            <span class="variable">instance</span>[<span class="variable">attr</span>] = <span class="variable">request</span>.<span class="variable">body</span>[<span class="variable">attr</span>];
+        }
+        <span class="variable">instance</span>.<span class="variable">save</span>(<span class="keyword">function</span> (<span class="variable">err</span>) {
+            <span class="keyword">if</span> (<span class="variable">err</span>) {
+                <span class="keyword">return</span> <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="variable">err</span>));
+            } <span class="keyword">else</span> <span class="keyword">if</span> (<span class="variable">request</span>.<span class="variable">xhr</span> || <span class="variable">request</span>.<span class="variable">format</span> === <span class="string">'json'</span>) {
+                <span class="keyword">return</span> <span class="variable">response</span>.<span class="variable">send</span>(<span class="variable">instance</span>);
+            }
+            <span class="variable">request</span>.<span class="variable">flash</span>(<span class="string">'info'</span>, <span class="string">'The %s was updated successfully'</span>, <span class="variable">singular</span>);
+            <span class="variable">response</span>.<span class="variable">redirect</span>(<span class="string">'/'</span> + <span class="variable">plural</span> + <span class="string">'/'</span> + <span class="variable">request</span>.<span class="variable">params</span>.<span class="variable">id</span>);
+        });
+    }
+
+    <span class="comment">//DELETE /&lt;resource&gt;/:id</span>
+    <span class="variable">routes</span>.<span class="variable">destroy</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
+        <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>).<span class="variable">remove</span>(<span class="keyword">function</span> (<span class="variable">err</span>) {
+            <span class="keyword">if</span> (<span class="variable">err</span>) {
+                <span class="keyword">return</span> <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="variable">err</span>));
+            } <span class="keyword">else</span> <span class="keyword">if</span> (<span class="variable">request</span>.<span class="variable">xhr</span> || <span class="variable">request</span>.<span class="variable">format</span> === <span class="string">'json'</span>) {
+                <span class="keyword">return</span> <span class="variable">response</span>.<span class="variable">send</span>(<span class="number integer">200</span>);
+            }
+            <span class="variable">request</span>.<span class="variable">flash</span>(<span class="string">'info'</span>, <span class="string">'The %s was removed successfully'</span>, <span class="variable">singular</span>);
+            <span class="variable">response</span>.<span class="variable">redirect</span>(<span class="string">'/'</span> + <span class="variable">plural</span>);
+        });
+    }
+
+    <span class="comment">//If there's a static acl() method, patch each action to route through it</span>
+    <span class="keyword">if</span> (<span class="variable">model</span>.<span class="variable">acl</span>) {
+        <span class="keyword">for</span> (<span class="keyword">var</span> <span class="variable">action</span> <span class="keyword">in</span> <span class="variable">routes</span>) {
+            (<span class="keyword">function</span> (<span class="variable">action</span>, <span class="variable">handle</span>) {
+                <span class="variable">routes</span>[<span class="variable">action</span>] = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
+                    <span class="keyword">var</span> <span class="variable">user</span> = <span class="variable">request</span>.<span class="variable">user</span> || <span class="keyword">null</span>
+                      , <span class="variable">obj</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>) || <span class="variable">request</span>.<span class="variable">body</span>;
+                    <span class="variable">model</span>.<span class="variable">acl</span>(<span class="variable">user</span>, <span class="variable">action</span>, <span class="variable">obj</span>, <span class="keyword">function</span> (<span class="variable">ok</span>) {
+                        <span class="keyword">if</span> (!<span class="variable">ok</span>) <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="string">'auth'</span>));
+                        <span class="keyword">else</span> <span class="variable">handle</span>(<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>);
+                    });
+                }
+            })(<span class="variable">action</span>, <span class="variable">routes</span>[<span class="variable">action</span>]);
+        }
+    }
+
+    <span class="keyword">return</span> <span class="variable">routes</span>;
+}</code></pre>
+</td>
+</tr>
+<tr class="code">
+<td class="docs">
+<p>Generate routes for embedded documents.</p>
+
+<h2></h2>
+
+<ul><li><p><strong>param</strong>: <em>HTTPServer</em>  app</p></li><li><p><strong>param</strong>: <em>string</em>  prefix</p></li><li><p><strong>param</strong>: <em>string</em>  parent</p></li><li><p><strong>param</strong>: <em>string</em>  resource</p></li><li><p><strong>param</strong>: <em>string</em>  attribute</p></li><li><p><strong>param</strong>: <em>object</em>  config (optional)</p></li><li><p><strong>return</strong>: <em>object</em>  routes</p></li><li><p><strong>api</strong>: <em>private</em></p></li></ul>
+</td>
+<td class="code">
+<pre><code><span class="keyword">function</span> <span class="variable">embeddedRoutes</span> (<span class="variable">app</span>, <span class="variable">prefix</span>, <span class="variable">parent_resource</span>, <span class="variable">resource</span>, <span class="variable">attribute</span>) {
+
+    <span class="keyword">var</span> <span class="variable">model</span> = <span class="variable">models</span>.<span class="variable">mongoose</span>.<span class="variable">model</span>(<span class="variable">resource</span>)
+      , <span class="variable">plural</span> = <span class="variable">lingo</span>.<span class="variable">pluralize</span>(<span class="variable">resource</span>)
+      , <span class="variable">singular</span> = <span class="variable">lingo</span>.<span class="variable">singularize</span>(<span class="variable">resource</span>)
+      , <span class="variable">parent_model</span> = <span class="variable">models</span>.<span class="variable">mongoose</span>.<span class="variable">model</span>(<span class="variable">parent_resource</span>)
+      , <span class="variable">parent_plural</span> = <span class="variable">lingo</span>.<span class="variable">pluralize</span>(<span class="variable">parent_resource</span>)
+      , <span class="variable">parent_singular</span> = <span class="variable">lingo</span>.<span class="variable">singularize</span>(<span class="variable">parent_resource</span>)
+      , <span class="variable">routes</span> = {};
+
+    <span class="variable">prefix</span> += <span class="string">'/'</span> + <span class="variable">plural</span>;
+
+    <span class="comment">//GET /&lt;parent_resource&gt;/:parent_id/&lt;resource&gt;</span>
+    <span class="variable">routes</span>.<span class="variable">index</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
+        <span class="keyword">var</span> <span class="variable">parent</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">parent_singular</span>)
+          , <span class="variable">children</span> = [];
+
+        <span class="keyword">if</span> (<span class="variable">parent</span>[<span class="variable">attribute</span>] &<span class="variable">amp</span>;&<span class="variable">amp</span>; <span class="variable">parent</span>[<span class="variable">attribute</span>].<span class="variable">length</span>) {
+            <span class="variable">parent</span>[<span class="variable">attribute</span>].<span class="variable">forEach</span>(<span class="keyword">function</span> (<span class="variable">child</span>) {
+                <span class="comment">//Convert each child to a JSON string</span>
+                <span class="keyword">var</span> <span class="variable">obj</span> = <span class="variable">child</span>.<span class="variable">toJSON</span>();
+                <span class="variable">obj</span>.<span class="variable">id</span> = <span class="variable">obj</span>.<span class="variable">_id</span>;
+                <span class="keyword">delete</span> <span class="variable">obj</span>.<span class="variable">_id</span>;
+                <span class="variable">children</span>.<span class="variable">push</span>(<span class="variable">obj</span>);
+            });
+        }
+        <span class="keyword">return</span> <span class="variable">response</span>.<span class="variable">send</span>(<span class="variable">children</span>);
+    }
+
+    <span class="comment">//POST /&lt;parent_resource&gt;/:parent_id/&lt;resource&gt;/:id</span>
+    <span class="variable">routes</span>.<span class="variable">create</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
+        <span class="keyword">var</span> <span class="variable">parent</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">parent_singular</span>)
+          , <span class="variable">child</span> = <span class="keyword">new</span> <span class="variable">model</span>();
+        <span class="keyword">if</span> (!<span class="variable">parent</span>[<span class="variable">attribute</span>]) {
+            <span class="variable">parent</span>[<span class="variable">attribute</span>] = [];
+        }
+        <span class="keyword">for</span> (<span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">request</span>.<span class="variable">body</span>) {
+            <span class="keyword">if</span> (<span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">model</span>.<span class="variable">schema</span>.<span class="variable">tree</span>) {
+                <span class="variable">child</span>[<span class="variable">attr</span>] = <span class="variable">request</span>.<span class="variable">body</span>[<span class="variable">attr</span>];
+            }
+        }
+        <span class="variable">parent</span>[<span class="variable">attribute</span>].<span class="variable">push</span>(<span class="variable">child</span>);
+        <span class="variable">parent</span>.<span class="variable">save</span>(<span class="keyword">function</span> (<span class="variable">err</span>) {
+            <span class="keyword">if</span> (<span class="variable">err</span>) {
+                <span class="keyword">return</span> <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="variable">err</span>));
+            }
+            <span class="variable">response</span>.<span class="variable">send</span>(<span class="variable">child</span>.<span class="variable">toJSON</span>());
+        });
+    }
+
+    <span class="comment">//GET /&lt;parent_resource&gt;/:parent_id/&lt;resource&gt;/:id</span>
+    <span class="variable">routes</span>.<span class="variable">read</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
+        <span class="keyword">var</span> <span class="variable">instance</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>);
+        <span class="variable">response</span>.<span class="variable">send</span>(<span class="variable">instance</span>);
+    }
+
+    <span class="comment">//PUT /&lt;parent_resource&gt;/:parent_id/&lt;resource&gt;/:id</span>
+    <span class="variable">routes</span>.<span class="variable">update</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
+        <span class="keyword">var</span> <span class="variable">instance</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>)
+          , <span class="variable">parent</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">parent_singular</span>);
+        <span class="keyword">for</span> (<span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">request</span>.<span class="variable">body</span>) {
+            <span class="keyword">if</span> (<span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">model</span>.<span class="variable">schema</span>.<span class="variable">tree</span>) {
+                <span class="variable">instance</span>[<span class="variable">attr</span>] = <span class="variable">request</span>.<span class="variable">body</span>[<span class="variable">attr</span>];
+            }
+        }
+        <span class="variable">parent</span>.<span class="variable">save</span>(<span class="keyword">function</span> (<span class="variable">err</span>) {
+            <span class="keyword">if</span> (<span class="variable">err</span>) {
+                <span class="keyword">return</span> <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="variable">err</span>));
+            }
+            <span class="variable">response</span>.<span class="variable">send</span>(<span class="number integer">200</span>);
+        });
+    }
+
+    <span class="comment">//DELETE /&lt;parent_resource&gt;/:parent_id/&lt;resource&gt;/:id</span>
+    <span class="variable">routes</span>.<span class="variable">destroy</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
+        <span class="keyword">var</span> <span class="variable">instance</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>)
+          , <span class="variable">parent</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">parent_singular</span>);
+        <span class="variable">instance</span>.<span class="variable">remove</span>();
+        <span class="variable">parent</span>.<span class="variable">save</span>(<span class="keyword">function</span> (<span class="variable">err</span>) {
+            <span class="keyword">if</span> (<span class="variable">err</span>) {
+                <span class="keyword">return</span> <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="variable">err</span>));
+            }
+            <span class="variable">response</span>.<span class="variable">send</span>(<span class="number integer">200</span>);
+        });
+    }
+
+    <span class="comment">//Run each embedded document route through the parent's acl() method</span>
+    <span class="keyword">if</span> (<span class="variable">parent_model</span>.<span class="variable">acl</span>) {
+        <span class="keyword">for</span> (<span class="keyword">var</span> <span class="variable">action</span> <span class="keyword">in</span> <span class="variable">routes</span>) {
+            (<span class="keyword">function</span> (<span class="variable">action</span>, <span class="variable">handle</span>) {
+                <span class="variable">routes</span>[<span class="variable">action</span>] = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
+                    <span class="keyword">var</span> <span class="variable">user</span> = <span class="variable">request</span>.<span class="variable">user</span> || <span class="keyword">null</span>
+                      , <span class="variable">obj</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>) || <span class="variable">request</span>.<span class="variable">body</span>;
+                    <span class="variable">parent_model</span>.<span class="variable">acl</span>(<span class="variable">user</span>, <span class="variable">action</span>, <span class="variable">obj</span>, <span class="keyword">function</span> (<span class="variable">ok</span>) {
+                        <span class="keyword">if</span> (!<span class="variable">ok</span>) <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="string">'auth'</span>));
+                        <span class="keyword">else</span> <span class="variable">handle</span>(<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>);
+                    });
+                }
+            })(<span class="variable">action</span>, <span class="variable">routes</span>[<span class="variable">action</span>]);
+        }
+    }
+
+    <span class="keyword">return</span> <span class="variable">routes</span>;
+}
+
+</code></pre>
+</td>
+</tr><tr class="filename"><td><h2 id="lib/request.js"><a href="#">request</a></h2></td><td>lib/request.js</td></tr><tr class="code">
 <td class="docs">
 <p>Module dependencies.
  </p>
@@ -132,7 +578,7 @@ code .this { color: #19469D; }</style>
         <span class="this">this</span>.<span class="variable">resources</span> = <span class="this">this</span>.<span class="variable">resource</span> || {};
         <span class="keyword">return</span> <span class="this">this</span>.<span class="variable">resources</span>[<span class="variable">name</span>] = <span class="variable">resource</span>;
     } <span class="keyword">else</span> <span class="keyword">if</span> (<span class="this">this</span>.<span class="variable">resources</span> &<span class="variable">amp</span>;&<span class="variable">amp</span>; <span class="variable">name</span> <span class="keyword">in</span> <span class="this">this</span>.<span class="variable">resources</span>) {
-        <span class="keyword">return</span> <span class="this">this</span>.<span class="variable">resource</span>[<span class="variable">name</span>]
+        <span class="keyword">return</span> <span class="this">this</span>.<span class="variable">resources</span>[<span class="variable">name</span>]
     }
     <span class="keyword">return</span> <span class="keyword">null</span>;
 }</code></pre>
@@ -402,442 +848,6 @@ code .this { color: #19469D; }</style>
 
 </code></pre>
 </td>
-</tr><tr class="filename"><td><h2 id="lib/rest.js"><a href="#">rest</a></h2></td><td>lib/rest.js</td></tr><tr class="code">
-<td class="docs">
-<p>Module dependencies.
- </p>
-</td>
-<td class="code">
-<pre><code><span class="keyword">var</span> <span class="variable">models</span> = <span class="variable">require</span>(<span class="string">'./models'</span>)
-  , <span class="variable">lingo</span> = <span class="variable">require</span>(<span class="string">'lingo'</span>).<span class="variable">en</span>;</code></pre>
-</td>
-</tr>
-<tr class="code">
-<td class="docs">
-<p>The MongoDB ID format.
- </p>
-</td>
-<td class="code">
-<pre><code><span class="keyword">var</span> <span class="variable">id_format</span> = <span class="regexp">/^[0-9a-f]{24}$/</span>;</code></pre>
-</td>
-</tr>
-<tr class="code">
-<td class="docs">
-<p>Add RESTful routes.</p>
-
-<h2></h2>
-
-<ul><li><p><strong>param</strong>: <em>HTTPServer</em>  app</p></li><li><p><strong>param</strong>: <em>object</em>  routes</p></li><li><p><strong>param</strong>: <em>string</em>  prefix</p></li><li><p><strong>param</strong>: <em>string</em>  singular</p></li><li><p><strong>api</strong>: <em>private</em></p></li></ul>
-</td>
-<td class="code">
-<pre><code><span class="keyword">function</span> <span class="variable">addRoutes</span> (<span class="variable">app</span>, <span class="variable">routes</span>, <span class="variable">prefix</span>, <span class="variable">singular</span>) {
-    <span class="variable">app</span>.<span class="variable">get</span>    ( <span class="variable">prefix</span> + <span class="string">'.:format?'</span>                   , <span class="variable">routes</span>.<span class="variable">index</span>  );
-    <span class="variable">app</span>.<span class="variable">post</span>   ( <span class="variable">prefix</span>                                 , <span class="variable">routes</span>.<span class="variable">create</span> );
-    <span class="variable">app</span>.<span class="variable">get</span>    ( <span class="variable">prefix</span> + <span class="string">'/:'</span> + <span class="variable">singular</span> + <span class="string">'.:format?'</span> , <span class="variable">routes</span>.<span class="variable">read</span>   );
-    <span class="variable">app</span>.<span class="variable">put</span>    ( <span class="variable">prefix</span> + <span class="string">'/:'</span> + <span class="variable">singular</span>               , <span class="variable">routes</span>.<span class="variable">update</span> );
-    <span class="variable">app</span>.<span class="keyword">delete</span> ( <span class="variable">prefix</span> + <span class="string">'/:'</span> + <span class="variable">singular</span>               , <span class="variable">routes</span>.<span class="variable">destroy</span>);
-}</code></pre>
-</td>
-</tr>
-<tr class="code">
-<td class="docs">
-<p>Create resource-based, RESTful routes for mongoose models.
-All models must be defined before calling this method.</p>
-
-<h2></h2>
-
-<ul><li><p><strong>param</strong>: <em>HTTPServer</em>  app</p></li><li><p><strong>param</strong>: <em>object</em>  config (optional)</p></li><li><p><strong>api</strong>: <em>public</em></p></li></ul>
-</td>
-<td class="code">
-<pre><code><span class="variable">exports</span>.<span class="variable">create</span> = <span class="keyword">function</span> (<span class="variable">app</span>, <span class="variable">config</span>) {
-    <span class="variable">config</span> = <span class="variable">config</span> || {};
-
-    <span class="comment">//Set config defaults</span>
-    <span class="variable">config</span>.<span class="variable">default_limit</span> = <span class="variable">config</span>.<span class="variable">default_limit</span> || <span class="number integer">20</span>
-    <span class="variable">config</span>.<span class="variable">max_limit</span> = <span class="variable">config</span>.<span class="variable">max_limit</span> || <span class="number integer">100</span>;
-
-    <span class="comment">//Add routes for each top level model</span>
-    <span class="variable">models</span>.<span class="variable">getTopLevel</span>().<span class="variable">forEach</span>(<span class="keyword">function</span> (<span class="variable">resource</span>) {
-
-        <span class="keyword">var</span> <span class="variable">singular</span> = <span class="variable">lingo</span>.<span class="variable">singularize</span>(<span class="variable">resource</span>)
-          , <span class="variable">plural</span> = <span class="variable">lingo</span>.<span class="variable">pluralize</span>(<span class="variable">resource</span>)
-          , <span class="variable">top_prefix</span> = (<span class="variable">config</span>.<span class="variable">path</span> || <span class="string">'/'</span>) + <span class="variable">plural</span>
-          , <span class="variable">routes</span>;
-
-        <span class="comment">//Autoload a resource when the param is part of a route</span>
-        <span class="variable">autoloadTopLevelResource</span>(<span class="variable">app</span>, <span class="variable">resource</span>, <span class="variable">config</span>);
-
-        <span class="comment">//Add RESTful routes</span>
-        <span class="variable">routes</span> = <span class="variable">topLevelRoutes</span>(<span class="variable">app</span>, <span class="variable">top_prefix</span>, <span class="variable">resource</span>, <span class="variable">config</span>);
-
-        <span class="variable">addRoutes</span>(<span class="variable">app</span>, <span class="variable">routes</span>, <span class="variable">top_prefix</span>, <span class="variable">singular</span>);
-
-        <span class="comment">//Add routes for embedded documents</span>
-        <span class="variable">models</span>.<span class="variable">getChildren</span>(<span class="variable">resource</span>).<span class="variable">forEach</span>(<span class="keyword">function</span> (<span class="variable">embedded</span>) {
-
-            <span class="keyword">var</span> <span class="variable">prefix</span> = <span class="variable">top_prefix</span> + <span class="string">'/:'</span> + <span class="variable">singular</span>
-              , <span class="variable">singular</span> = <span class="variable">lingo</span>.<span class="variable">singularize</span>(<span class="variable">embedded</span>.<span class="variable">resource</span>);
-
-            <span class="variable">autoloadEmbeddedResource</span>(<span class="variable">app</span>, <span class="variable">resource</span>,
-                <span class="variable">embedded</span>.<span class="variable">resource</span>, <span class="variable">embedded</span>.<span class="variable">attribute</span>, <span class="variable">config</span>);
-
-            <span class="variable">routes</span> = <span class="variable">embeddedRoutes</span>(<span class="variable">app</span>, <span class="variable">prefix</span>, <span class="variable">resource</span>, <span class="variable">embedded</span>.<span class="variable">resource</span>,
-                                        <span class="variable">embedded</span>.<span class="variable">attribute</span>);
-
-            <span class="variable">addRoutes</span>(<span class="variable">app</span>, <span class="variable">routes</span>, <span class="variable">prefix</span>, <span class="variable">singular</span>);
-
-        });
-
-    });
-
-    <span class="variable">app</span>.<span class="variable">dynamicHelpers</span>({<span class="variable">resource</span>: <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>) {
-        <span class="keyword">return</span> <span class="variable">request</span>.<span class="variable">resource</span>;
-    }});
-}</code></pre>
-</td>
-</tr>
-<tr class="code">
-<td class="docs">
-<p>Autoload a resource when a route contains it as a parameter, e.g.
-/posts/:post will automatically load the requested post, where :post
-is either an ID or unique slug, e.g. /posts/my-test-post or /posts/23</p>
-
-<h2></h2>
-
-<ul><li><p><strong>param</strong>: <em>HTTPServer</em>  app</p></li><li><p><strong>param</strong>: <em>string</em>  resource</p></li><li><p><strong>param</strong>: <em>object</em>  config (optional)</p></li><li><p><strong>api</strong>: <em>private</em></p></li></ul>
-</td>
-<td class="code">
-<pre><code><span class="keyword">function</span> <span class="variable">autoloadTopLevelResource</span> (<span class="variable">app</span>, <span class="variable">resource</span>, <span class="variable">config</span>) {
-    <span class="keyword">var</span> <span class="variable">model</span> = <span class="variable">models</span>.<span class="variable">mongoose</span>.<span class="variable">model</span>(<span class="variable">resource</span>)
-      , <span class="variable">singular</span> = <span class="variable">lingo</span>.<span class="variable">singularize</span>(<span class="variable">resource</span>);
-
-    <span class="variable">app</span>.<span class="variable">param</span>(<span class="variable">singular</span>, <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
-        <span class="keyword">var</span> <span class="variable">id</span> = <span class="variable">request</span>.<span class="variable">params</span>[<span class="variable">singular</span>];
-
-        <span class="keyword">function</span> <span class="variable">handleResource</span> (<span class="variable">err</span>, <span class="variable">obj</span>) {
-            <span class="keyword">if</span> (<span class="variable">err</span>) {
-                <span class="keyword">return</span> <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="variable">err</span>));
-            } <span class="keyword">else</span> <span class="keyword">if</span> (<span class="keyword">null</span> == <span class="variable">obj</span>) {
-                <span class="keyword">if</span> (<span class="variable">request</span>.<span class="variable">xhr</span> || <span class="variable">request</span>.<span class="variable">format</span>) {
-                    <span class="variable">response</span>.<span class="variable">send</span>(<span class="number integer">404</span>);
-                } <span class="keyword">else</span> {
-                    <span class="variable">request</span>.<span class="variable">flash</span>(<span class="string">'error'</span>, <span class="string">'The %s could not be found.'</span>, <span class="variable">singular</span>);
-                    <span class="variable">response</span>.<span class="variable">redirect</span>(<span class="string">'back'</span>);
-                }
-            } <span class="keyword">else</span> {
-                <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>, <span class="variable">obj</span>);
-                <span class="variable">next</span>();
-            }
-        }
-
-        <span class="comment">//Is there a unique slug attribute we can lookup by? If not, lookup by ID</span>
-        <span class="keyword">if</span> (<span class="variable">model</span>.<span class="variable">schema</span>.<span class="variable">tree</span>.<span class="variable">slug</span> &<span class="variable">amp</span>;&<span class="variable">amp</span>; !<span class="variable">id_format</span>.<span class="variable">test</span>(<span class="variable">id</span>)) {
-            <span class="variable">model</span>.<span class="variable">findOne</span>({<span class="variable">slug</span>: <span class="variable">id</span>}, <span class="variable">handleResource</span>);
-        } <span class="keyword">else</span> {
-            <span class="variable">model</span>.<span class="variable">findById</span>(<span class="variable">id</span>, <span class="variable">handleResource</span>);
-        }
-    });
-}</code></pre>
-</td>
-</tr>
-<tr class="code">
-<td class="docs">
-<p>Autoload an embedded resource when a route contains it as a parameter, e.g.
-/posts/:post/commments/:comment will automatically load the requested
-comment (assuming the post has already been loaded).</p>
-
-<h2></h2>
-
-<ul><li><p><strong>param</strong>: <em>HTTPServer</em>  app</p></li><li><p><strong>param</strong>: <em>string</em>  parent</p></li><li><p><strong>param</strong>: <em>string</em>  resource</p></li><li><p><strong>param</strong>: <em>string</em>  attribute - the attribute name of the embedded resource</p></li><li><p><strong>param</strong>: <em>object</em>  config (optional)</p></li><li><p><strong>api</strong>: <em>private</em></p></li></ul>
-</td>
-<td class="code">
-<pre><code><span class="keyword">function</span> <span class="variable">autoloadEmbeddedResource</span> (<span class="variable">app</span>, <span class="variable">parent</span>, <span class="variable">resource</span>, <span class="variable">attribute</span>, <span class="variable">config</span>) {
-    <span class="keyword">var</span> <span class="variable">model</span> = <span class="variable">models</span>.<span class="variable">mongoose</span>.<span class="variable">model</span>(<span class="variable">resource</span>)
-      , <span class="variable">singular</span> = <span class="variable">lingo</span>.<span class="variable">singularize</span>(<span class="variable">resource</span>)
-      , <span class="variable">parent_singular</span> = <span class="variable">lingo</span>.<span class="variable">singularize</span>(<span class="variable">parent</span>);
-
-    <span class="variable">app</span>.<span class="variable">param</span>(<span class="variable">singular</span>, <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
-        <span class="keyword">var</span> <span class="variable">parent</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">parent_singular</span>)
-          , <span class="variable">id</span> = <span class="variable">request</span>.<span class="variable">params</span>[<span class="variable">singular</span>];
-        <span class="keyword">if</span> (<span class="variable">parent</span>[<span class="variable">attribute</span>]) {
-            <span class="variable">parent</span>[<span class="variable">attribute</span>].<span class="variable">forEach</span>(<span class="keyword">function</span> (<span class="variable">child</span>) {
-                <span class="keyword">if</span> (<span class="variable">child</span>.<span class="variable">get</span>(<span class="string">'id'</span>) == <span class="variable">id</span>) {
-                    <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>, <span class="variable">child</span>);
-                    <span class="keyword">return</span> <span class="variable">next</span>();
-                }
-            });
-        } <span class="keyword">else</span> <span class="keyword">if</span> (<span class="variable">request</span>.<span class="variable">xhr</span> || <span class="variable">request</span>.<span class="variable">format</span>) {
-            <span class="variable">response</span>.<span class="variable">send</span>(<span class="number integer">404</span>);
-        } <span class="keyword">else</span> {
-            <span class="variable">request</span>.<span class="variable">flash</span>(<span class="string">'error'</span>, <span class="string">'The %s could not be found.'</span>, <span class="variable">singular</span>);
-            <span class="variable">response</span>.<span class="variable">redirect</span>(<span class="string">'back'</span>);
-        }
-    });
-}</code></pre>
-</td>
-</tr>
-<tr class="code">
-<td class="docs">
-<p>Generate routes for top level models.</p>
-
-<h2></h2>
-
-<ul><li><p><strong>param</strong>: <em>HTTPServer</em>  app</p></li><li><p><strong>param</strong>: <em>string</em>  resource</p></li><li><p><strong>param</strong>: <em>object</em>  config (optional)</p></li><li><p><strong>return</strong>: <em>object</em>  routes</p></li><li><p><strong>api</strong>: <em>private</em></p></li></ul>
-</td>
-<td class="code">
-<pre><code><span class="keyword">function</span> <span class="variable">topLevelRoutes</span> (<span class="variable">app</span>, <span class="variable">prefix</span>, <span class="variable">resource</span>, <span class="variable">config</span>) {
-
-    <span class="keyword">var</span> <span class="variable">model</span> = <span class="variable">models</span>.<span class="variable">mongoose</span>.<span class="variable">model</span>(<span class="variable">resource</span>)
-      , <span class="variable">singular</span> = <span class="variable">lingo</span>.<span class="variable">singularize</span>(<span class="variable">resource</span>)
-      , <span class="variable">plural</span> = <span class="variable">lingo</span>.<span class="variable">pluralize</span>(<span class="variable">resource</span>)
-      , <span class="variable">routes</span> = {};
-
-    <span class="comment">//GET /&lt;resource&gt;</span>
-    <span class="variable">routes</span>.<span class="variable">index</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
-        <span class="keyword">var</span> <span class="variable">page</span> = <span class="variable">request</span>.<span class="variable">query</span>.<span class="variable">page</span> || <span class="number integer">1</span>
-          , <span class="variable">limit</span> = <span class="class">Math</span>.<span class="variable">min</span>(<span class="variable">config</span>.<span class="variable">max_limit</span>, <span class="variable">request</span>.<span class="variable">query</span>.<span class="variable">limit</span>
-                                                   || <span class="variable">config</span>.<span class="variable">default_limit</span>)
-          , <span class="variable">sort</span> = <span class="variable">request</span>.<span class="variable">query</span>.<span class="variable">order</span> || <span class="string">'id'</span>
-          , <span class="variable">desc</span> = <span class="variable">request</span>.<span class="variable">query</span>.<span class="variable">desc</span> || <span class="variable">false</span>
-          , <span class="variable">offset</span> = (<span class="variable">page</span> - <span class="number integer">1</span>) * <span class="variable">limit</span>
-          , <span class="variable">locals</span> = {}
-          , <span class="variable">query</span>;
-
-        <span class="keyword">function</span> <span class="variable">doQuery</span>(<span class="variable">query</span>) {
-            <span class="keyword">if</span> (<span class="variable">request</span>.<span class="variable">query</span>.<span class="variable">order</span>) {
-                <span class="variable">query</span> = <span class="variable">query</span>.<span class="variable">sort</span>([[
-                    <span class="variable">request</span>.<span class="variable">query</span>.<span class="variable">order</span>, <span class="variable">request</span>.<span class="variable">query</span>.<span class="variable">desc</span> ? <span class="string">'descending'</span>
-                                                            : <span class="string">'ascending'</span>
-                ]]);
-            }
-            <span class="variable">query</span>.<span class="variable">skip</span>(<span class="variable">offset</span>).<span class="variable">limit</span>(<span class="variable">limit</span>).<span class="variable">run</span>(<span class="keyword">function</span> (<span class="variable">err</span>, <span class="variable">results</span>) {
-                <span class="keyword">if</span> (<span class="variable">err</span>) {
-                    <span class="keyword">return</span> <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="variable">err</span>));
-                } <span class="keyword">else</span> <span class="keyword">if</span> (<span class="variable">request</span>.<span class="variable">xhr</span> || <span class="variable">request</span>.<span class="variable">format</span> === <span class="string">'json'</span>) {
-                    <span class="keyword">return</span> <span class="variable">response</span>.<span class="variable">send</span>(<span class="variable">results</span> || []);
-                }
-                <span class="keyword">var</span> <span class="variable">locals</span> = {
-                    <span class="variable">limit</span>  : <span class="variable">limit</span>
-                  , <span class="variable">page</span>   : <span class="variable">page</span>
-                  , <span class="variable">offset</span> : <span class="variable">offset</span>
-                  , <span class="variable">sort</span>   : <span class="variable">sort</span>
-                  , <span class="variable">query</span>  : <span class="variable">query</span>
-                }
-                <span class="variable">locals</span>[<span class="variable">plural</span>] = <span class="variable">results</span> || [];
-                <span class="variable">response</span>.<span class="variable">locals</span>(<span class="variable">locals</span>);
-                <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">plural</span>, <span class="variable">results</span>);
-                <span class="variable">response</span>.<span class="variable">render</span>(<span class="variable">plural</span> + <span class="string">'/index'</span>);
-            });
-        }
-
-        <span class="comment">//Use the static search() method if it's defined</span>
-        <span class="keyword">if</span> (<span class="variable">model</span>.<span class="variable">search</span>) {
-            <span class="variable">model</span>.<span class="variable">search</span>(<span class="variable">request</span>.<span class="variable">query</span>, <span class="variable">request</span>.<span class="variable">user</span>, <span class="keyword">function</span> (<span class="variable">err</span>, <span class="variable">query</span>) {
-                <span class="keyword">if</span> (<span class="variable">err</span>) {
-                    <span class="keyword">return</span> <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="variable">err</span>));
-                }
-                <span class="variable">doQuery</span>(<span class="variable">query</span>);
-            });
-        } <span class="keyword">else</span> {
-            <span class="variable">doQuery</span>(<span class="variable">model</span>.<span class="variable">find</span>());
-        }
-    }
-
-    <span class="comment">//POST /&lt;resource&gt;</span>
-    <span class="variable">routes</span>.<span class="variable">create</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
-        <span class="keyword">var</span> <span class="variable">attr</span>, <span class="variable">instance</span> = <span class="keyword">new</span> <span class="variable">model</span>();
-        <span class="keyword">for</span> (<span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">request</span>.<span class="variable">body</span>) {
-            <span class="keyword">if</span> (<span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">model</span>.<span class="variable">schema</span>.<span class="variable">tree</span>) {
-                <span class="variable">instance</span>[<span class="variable">attr</span>] = <span class="variable">request</span>.<span class="variable">body</span>[<span class="variable">attr</span>];
-            }
-        }
-        <span class="variable">instance</span>.<span class="variable">save</span>(<span class="keyword">function</span> (<span class="variable">err</span>) {
-            <span class="keyword">if</span> (<span class="variable">err</span>) {
-                <span class="keyword">return</span> <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="variable">err</span>));
-            } <span class="keyword">else</span> <span class="keyword">if</span> (<span class="variable">request</span>.<span class="variable">xhr</span> || <span class="variable">request</span>.<span class="variable">format</span> === <span class="string">'json'</span>) {
-                <span class="keyword">return</span> <span class="variable">response</span>.<span class="variable">send</span>(<span class="variable">instance</span>);
-            }
-            <span class="variable">request</span>.<span class="variable">flash</span>(<span class="string">'info'</span>, <span class="string">'The %s was created successfully'</span>, <span class="variable">singular</span>);
-            <span class="variable">response</span>.<span class="variable">redirect</span>(<span class="string">'/'</span> + <span class="variable">plural</span>);
-        });
-    }
-
-    <span class="comment">//GET /&lt;resource&gt;/:id</span>
-    <span class="variable">routes</span>.<span class="variable">read</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
-        <span class="keyword">if</span> (<span class="variable">request</span>.<span class="variable">xhr</span> || <span class="variable">request</span>.<span class="variable">format</span> === <span class="string">'json'</span>) {
-            <span class="keyword">return</span> <span class="variable">response</span>.<span class="variable">send</span>(<span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>).<span class="variable">toJSON</span>());
-        }
-        <span class="variable">response</span>.<span class="variable">local</span>(<span class="string">'instance'</span>, <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>));
-        <span class="variable">response</span>.<span class="variable">render</span>(<span class="variable">plural</span> + <span class="string">'/read'</span>);
-    }
-
-    <span class="comment">//PUT /&lt;resource&gt;/:id</span>
-    <span class="variable">routes</span>.<span class="variable">update</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
-        <span class="keyword">var</span> <span class="variable">attr</span>, <span class="variable">instance</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>);
-        <span class="keyword">for</span> (<span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">request</span>.<span class="variable">body</span>) {
-            <span class="keyword">if</span> (<span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">model</span>.<span class="variable">schema</span>.<span class="variable">tree</span>) {
-                <span class="variable">instance</span>[<span class="variable">attr</span>] = <span class="variable">request</span>.<span class="variable">body</span>[<span class="variable">attr</span>];
-            }
-        }
-        <span class="variable">instance</span>.<span class="variable">save</span>(<span class="keyword">function</span> (<span class="variable">err</span>) {
-            <span class="keyword">if</span> (<span class="variable">err</span>) {
-                <span class="keyword">return</span> <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="variable">err</span>));
-            } <span class="keyword">else</span> <span class="keyword">if</span> (<span class="variable">request</span>.<span class="variable">xhr</span> || <span class="variable">request</span>.<span class="variable">format</span> === <span class="string">'json'</span>) {
-                <span class="keyword">return</span> <span class="variable">response</span>.<span class="variable">send</span>(<span class="variable">instance</span>);
-            }
-            <span class="variable">request</span>.<span class="variable">flash</span>(<span class="string">'info'</span>, <span class="string">'The %s was updated successfully'</span>, <span class="variable">singular</span>);
-            <span class="variable">response</span>.<span class="variable">redirect</span>(<span class="string">'/'</span> + <span class="variable">plural</span> + <span class="string">'/'</span> + <span class="variable">request</span>.<span class="variable">params</span>.<span class="variable">id</span>);
-        });
-    }
-
-    <span class="comment">//DELETE /&lt;resource&gt;/:id</span>
-    <span class="variable">routes</span>.<span class="variable">destroy</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
-        <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>).<span class="variable">remove</span>(<span class="keyword">function</span> (<span class="variable">err</span>) {
-            <span class="keyword">if</span> (<span class="variable">err</span>) {
-                <span class="keyword">return</span> <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="variable">err</span>));
-            } <span class="keyword">else</span> <span class="keyword">if</span> (<span class="variable">request</span>.<span class="variable">xhr</span> || <span class="variable">request</span>.<span class="variable">format</span> === <span class="string">'json'</span>) {
-                <span class="keyword">return</span> <span class="variable">response</span>.<span class="variable">send</span>(<span class="number integer">200</span>);
-            }
-            <span class="variable">request</span>.<span class="variable">flash</span>(<span class="string">'info'</span>, <span class="string">'The %s was removed successfully'</span>, <span class="variable">singular</span>);
-            <span class="variable">response</span>.<span class="variable">redirect</span>(<span class="string">'/'</span> + <span class="variable">plural</span>);
-        });
-    }
-
-    <span class="comment">//If there's a static acl() method, patch each action to route through it</span>
-    <span class="keyword">if</span> (<span class="variable">model</span>.<span class="variable">acl</span>) {
-        <span class="keyword">for</span> (<span class="keyword">var</span> <span class="variable">action</span> <span class="keyword">in</span> <span class="variable">routes</span>) {
-            (<span class="keyword">function</span> (<span class="variable">action</span>, <span class="variable">handle</span>) {
-                <span class="variable">routes</span>[<span class="variable">action</span>] = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
-                    <span class="keyword">var</span> <span class="variable">user</span> = <span class="variable">request</span>.<span class="variable">user</span> || <span class="keyword">null</span>
-                      , <span class="variable">obj</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>) || <span class="keyword">null</span>;
-                    <span class="variable">model</span>.<span class="variable">acl</span>(<span class="variable">user</span>, <span class="variable">action</span>, <span class="variable">obj</span>, <span class="keyword">function</span> (<span class="variable">ok</span>) {
-                        <span class="keyword">if</span> (!<span class="variable">ok</span>) <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="string">'auth'</span>));
-                        <span class="keyword">else</span> <span class="variable">handle</span>(<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>);
-                    });
-                }
-            })(<span class="variable">action</span>, <span class="variable">routes</span>[<span class="variable">action</span>]);
-        }
-    }
-
-    <span class="keyword">return</span> <span class="variable">routes</span>;
-}</code></pre>
-</td>
-</tr>
-<tr class="code">
-<td class="docs">
-<p>Generate routes for embedded documents.</p>
-
-<h2></h2>
-
-<ul><li><p><strong>param</strong>: <em>HTTPServer</em>  app</p></li><li><p><strong>param</strong>: <em>string</em>  prefix</p></li><li><p><strong>param</strong>: <em>string</em>  parent</p></li><li><p><strong>param</strong>: <em>string</em>  resource</p></li><li><p><strong>param</strong>: <em>string</em>  attribute</p></li><li><p><strong>param</strong>: <em>object</em>  config (optional)</p></li><li><p><strong>return</strong>: <em>object</em>  routes</p></li><li><p><strong>api</strong>: <em>private</em></p></li></ul>
-</td>
-<td class="code">
-<pre><code><span class="keyword">function</span> <span class="variable">embeddedRoutes</span> (<span class="variable">app</span>, <span class="variable">prefix</span>, <span class="variable">parent_resource</span>, <span class="variable">resource</span>, <span class="variable">attribute</span>) {
-
-    <span class="keyword">var</span> <span class="variable">model</span> = <span class="variable">models</span>.<span class="variable">mongoose</span>.<span class="variable">model</span>(<span class="variable">resource</span>)
-      , <span class="variable">plural</span> = <span class="variable">lingo</span>.<span class="variable">pluralize</span>(<span class="variable">resource</span>)
-      , <span class="variable">singular</span> = <span class="variable">lingo</span>.<span class="variable">singularize</span>(<span class="variable">resource</span>)
-      , <span class="variable">parent_model</span> = <span class="variable">models</span>.<span class="variable">mongoose</span>.<span class="variable">model</span>(<span class="variable">parent_resource</span>)
-      , <span class="variable">parent_plural</span> = <span class="variable">lingo</span>.<span class="variable">pluralize</span>(<span class="variable">parent_resource</span>)
-      , <span class="variable">parent_singular</span> = <span class="variable">lingo</span>.<span class="variable">singularize</span>(<span class="variable">parent_resource</span>)
-      , <span class="variable">routes</span> = {};
-
-    <span class="variable">prefix</span> += <span class="string">'/'</span> + <span class="variable">plural</span>;
-
-    <span class="comment">//GET /&lt;parent_resource&gt;/:parent_id/&lt;resource&gt;</span>
-    <span class="variable">routes</span>.<span class="variable">index</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
-        <span class="keyword">var</span> <span class="variable">parent</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">parent_singular</span>)
-          , <span class="variable">children</span> = [];
-        <span class="keyword">if</span> (<span class="variable">parent</span>[<span class="variable">attribute</span>] &<span class="variable">amp</span>;&<span class="variable">amp</span>; <span class="variable">parent</span>[<span class="variable">attribute</span>].<span class="variable">length</span>) {
-            <span class="variable">parent</span>[<span class="variable">attribute</span>].<span class="variable">forEach</span>(<span class="keyword">function</span> (<span class="variable">child</span>) {
-                <span class="comment">//Convert each child to a JSON string</span>
-                <span class="keyword">var</span> <span class="variable">obj</span> = <span class="variable">child</span>.<span class="variable">toJSON</span>();
-                <span class="variable">obj</span>.<span class="variable">id</span> = <span class="variable">obj</span>.<span class="variable">_id</span>;
-                <span class="keyword">delete</span> <span class="variable">obj</span>.<span class="variable">_id</span>;
-                <span class="variable">children</span>.<span class="variable">push</span>(<span class="variable">obj</span>);
-            });
-        }
-        <span class="keyword">return</span> <span class="variable">response</span>.<span class="variable">send</span>(<span class="variable">children</span>);
-    }
-
-    <span class="comment">//POST /&lt;parent_resource&gt;/:parent_id/&lt;resource&gt;/:id</span>
-    <span class="variable">routes</span>.<span class="variable">create</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
-        <span class="keyword">var</span> <span class="variable">parent</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">parent_singular</span>)
-          , <span class="variable">child</span> = <span class="keyword">new</span> <span class="variable">model</span>();
-        <span class="keyword">if</span> (!<span class="variable">parent</span>[<span class="variable">attribute</span>]) {
-            <span class="variable">parent</span>[<span class="variable">attribute</span>] = [];
-        }
-        <span class="keyword">for</span> (<span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">request</span>.<span class="variable">body</span>) {
-            <span class="keyword">if</span> (<span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">model</span>.<span class="variable">schema</span>.<span class="variable">tree</span>) {
-                <span class="variable">child</span>[<span class="variable">attr</span>] = <span class="variable">request</span>.<span class="variable">body</span>[<span class="variable">attr</span>];
-            }
-        }
-        <span class="variable">parent</span>[<span class="variable">attribute</span>].<span class="variable">push</span>(<span class="variable">child</span>);
-        <span class="variable">parent</span>.<span class="variable">save</span>(<span class="keyword">function</span> (<span class="variable">err</span>) {
-            <span class="keyword">if</span> (<span class="variable">err</span>) {
-                <span class="keyword">return</span> <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="variable">err</span>));
-            }
-            <span class="variable">response</span>.<span class="variable">send</span>(<span class="variable">child</span>.<span class="variable">toJSON</span>());
-        });
-    }
-
-    <span class="comment">//GET /&lt;parent_resource&gt;/:parent_id/&lt;resource&gt;/:id</span>
-    <span class="variable">routes</span>.<span class="variable">read</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
-        <span class="keyword">var</span> <span class="variable">instance</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>);
-        <span class="variable">response</span>.<span class="variable">send</span>(<span class="variable">instance</span>);
-    }
-
-    <span class="comment">//PUT /&lt;parent_resource&gt;/:parent_id/&lt;resource&gt;/:id</span>
-    <span class="variable">routes</span>.<span class="variable">update</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
-        <span class="keyword">var</span> <span class="variable">instance</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>)
-          , <span class="variable">parent</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">parent_singular</span>);
-        <span class="keyword">for</span> (<span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">request</span>.<span class="variable">body</span>) {
-            <span class="keyword">if</span> (<span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">model</span>.<span class="variable">schema</span>.<span class="variable">tree</span>) {
-                <span class="variable">instance</span>[<span class="variable">attr</span>] = <span class="variable">request</span>.<span class="variable">body</span>[<span class="variable">attr</span>];
-            }
-        }
-        <span class="variable">parent</span>.<span class="variable">save</span>(<span class="keyword">function</span> (<span class="variable">err</span>) {
-            <span class="keyword">if</span> (<span class="variable">err</span>) {
-                <span class="keyword">return</span> <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="variable">err</span>));
-            }
-            <span class="variable">response</span>.<span class="variable">send</span>(<span class="number integer">200</span>);
-        });
-    }
-
-    <span class="comment">//DELETE /&lt;parent_resource&gt;/:parent_id/&lt;resource&gt;/:id</span>
-    <span class="variable">routes</span>.<span class="variable">destroy</span> = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
-        <span class="keyword">var</span> <span class="variable">instance</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>)
-          , <span class="variable">parent</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">parent_singular</span>);
-        <span class="variable">instance</span>.<span class="variable">remove</span>();
-        <span class="variable">parent</span>.<span class="variable">save</span>(<span class="keyword">function</span> (<span class="variable">err</span>) {
-            <span class="keyword">if</span> (<span class="variable">err</span>) {
-                <span class="keyword">return</span> <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="variable">err</span>));
-            }
-            <span class="variable">response</span>.<span class="variable">send</span>(<span class="number integer">200</span>);
-        });
-    }
-
-    <span class="comment">//Run each embedded document route through the parent's acl() method</span>
-    <span class="keyword">if</span> (<span class="variable">parent_model</span>.<span class="variable">acl</span>) {
-        <span class="keyword">for</span> (<span class="keyword">var</span> <span class="variable">action</span> <span class="keyword">in</span> <span class="variable">routes</span>) {
-            (<span class="keyword">function</span> (<span class="variable">action</span>, <span class="variable">handle</span>) {
-                <span class="variable">routes</span>[<span class="variable">action</span>] = <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>) {
-                    <span class="keyword">var</span> <span class="variable">user</span> = <span class="variable">request</span>.<span class="variable">user</span> || <span class="keyword">null</span>
-                      , <span class="variable">obj</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">singular</span>) || <span class="keyword">null</span>;
-                    <span class="variable">parent_model</span>.<span class="variable">acl</span>(<span class="variable">user</span>, <span class="variable">action</span>, <span class="variable">obj</span>, <span class="keyword">function</span> (<span class="variable">ok</span>) {
-                        <span class="keyword">if</span> (!<span class="variable">ok</span>) <span class="variable">next</span>(<span class="keyword">new</span> <span class="class">Error</span>(<span class="string">'auth'</span>));
-                        <span class="keyword">else</span> <span class="variable">handle</span>(<span class="variable">request</span>, <span class="variable">response</span>, <span class="variable">next</span>);
-                    });
-                }
-            })(<span class="variable">action</span>, <span class="variable">routes</span>[<span class="variable">action</span>]);
-        }
-    }
-
-    <span class="keyword">return</span> <span class="variable">routes</span>;
-}
-
-</code></pre>
-</td>
 </tr><tr class="filename"><td><h2 id="lib/backbone.js"><a href="#">backbone</a></h2></td><td>lib/backbone.js</td></tr><tr class="code">
 <td class="docs">
 <p>Module dependencies.
@@ -860,9 +870,36 @@ e.g. "my_table" =&gt; "MyTable"</p>
 </td>
 <td class="code">
 <pre><code><span class="keyword">function</span> <span class="variable">classify</span> (<span class="variable">str</span>) {
-    <span class="keyword">return</span> <span class="variable">str</span>.<span class="variable">replace</span>(<span class="string">'_'</span>, <span class="string">' '</span>).<span class="variable">replace</span>(<span class="regexp">/( |^)[a-z]/g</span>, <span class="keyword">function</span> (<span class="variable">str</span>) {
-        <span class="keyword">return</span> <span class="variable">str</span>.<span class="variable">toLowerCase</span>();
+    <span class="keyword">return</span> <span class="variable">str</span>.<span class="variable">replace</span>(<span class="string">'_'</span>, <span class="string">' '</span>).<span class="variable">replace</span>(<span class="regexp">/(^| )[a-z]/g</span>, <span class="keyword">function</span> (<span class="variable">str</span>) {
+        <span class="keyword">return</span> <span class="variable">str</span>.<span class="variable">toUpperCase</span>();
     }).<span class="variable">replace</span>(<span class="string">' '</span>, <span class="string">''</span>);
+}</code></pre>
+</td>
+</tr>
+<tr class="code">
+<td class="docs">
+<p>Recursively replace <code>_id</code> with <code>id</code> in an object.</p>
+
+<h2></h2>
+
+<ul><li><p><strong>param</strong>: <em>object</em>  instance</p></li><li><p><strong>api</strong>: <em>private</em></p></li></ul>
+</td>
+<td class="code">
+<pre><code><span class="keyword">function</span> <span class="variable">convertUnderscoreId</span> (<span class="variable">instance</span>) {
+    <span class="keyword">for</span> (<span class="keyword">var</span> <span class="variable">attr</span> <span class="keyword">in</span> <span class="variable">instance</span>) {
+        <span class="keyword">if</span> (<span class="variable">attr</span> == <span class="string">'_id'</span>) {
+            <span class="variable">instance</span>.<span class="variable">id</span> = <span class="variable">instance</span>[<span class="variable">attr</span>];
+            <span class="keyword">delete</span> <span class="variable">instance</span>.<span class="variable">_id</span>;
+        } <span class="keyword">else</span> <span class="keyword">if</span> (<span class="class">Array</span>.<span class="variable">isArray</span>(<span class="variable">instance</span>[<span class="variable">attr</span>])) {
+            <span class="variable">instance</span>[<span class="variable">attr</span>].<span class="variable">forEach</span>(<span class="keyword">function</span> (<span class="variable">child</span>) {
+                <span class="keyword">if</span> (<span class="keyword">typeof</span> <span class="variable">child</span> === <span class="string">'object'</span>) {
+                    <span class="variable">convertUnderscoreId</span>(<span class="variable">child</span>);
+                }
+            });
+        } <span class="keyword">else</span> <span class="keyword">if</span> (<span class="keyword">typeof</span> <span class="variable">instance</span>[<span class="variable">attr</span>] === <span class="string">'object'</span>) {
+            <span class="variable">convertUnderscoreId</span>(<span class="variable">instance</span>[<span class="variable">attr</span>]);
+        }
+    }
 }</code></pre>
 </td>
 </tr>
@@ -875,7 +912,7 @@ e.g. "my_table" =&gt; "MyTable"</p>
 <ul><li><p><strong>param</strong>: <em>string</em>  namespace (optional)</p></li><li><p><strong>return</strong>: <em>string</em>  backbone_javascript</p></li><li><p><strong>api</strong>: <em>public</em></p></li></ul>
 </td>
 <td class="code">
-<pre><code><span class="variable">exports</span>.<span class="variable">generate</span> = <span class="keyword">function</span> (<span class="variable">namespace</span>) {
+<pre><code><span class="variable">exports</span>.<span class="variable">generate</span> = <span class="keyword">function</span> (<span class="variable">app</span>, <span class="variable">namespace</span>) {
     <span class="variable">namespace</span> = <span class="variable">namespace</span> || <span class="string">''</span>;
 
     <span class="keyword">var</span> <span class="variable">backbone</span> = <span class="variable">backboneCommon</span>(<span class="variable">namespace</span>);
@@ -895,6 +932,73 @@ e.g. "my_table" =&gt; "MyTable"</p>
 </tr>
 <tr class="code">
 <td class="docs">
+<p>Generate express view helpers for creating backbone models and collections.</p>
+
+<h2></h2>
+
+<ul><li><p><strong>param</strong>: <em>HTTPServer</em>  app</p></li><li><p><strong>param</strong>: <em>string</em>  namespace (optional)</p></li><li><p><strong>api</strong>: <em>public</em></p></li></ul>
+</td>
+<td class="code">
+<pre><code><span class="variable">exports</span>.<span class="variable">helpers</span> = <span class="keyword">function</span> (<span class="variable">app</span>, <span class="variable">namespace</span>) {
+
+    <span class="variable">namespace</span> = <span class="variable">namespace</span> || <span class="string">''</span>;
+
+    <span class="variable">app</span>.<span class="variable">dynamicHelpers</span>({
+
+        <span class="variable">backboneModel</span>: <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>) {
+            <span class="keyword">return</span> <span class="keyword">function</span> (<span class="variable">resource</span>, <span class="variable">var_name</span>) {
+                <span class="keyword">var</span> <span class="variable">singular</span> = <span class="variable">resource</span>
+                  , <span class="keyword">class</span> = <span class="variable">namespace</span> + <span class="variable">classify</span>(<span class="variable">resource</span>)
+                  , <span class="variable">instance</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">resource</span>);
+
+                <span class="variable">var_name</span> = <span class="variable">var_name</span> || <span class="variable">resource</span>;
+
+                <span class="keyword">if</span> (<span class="variable">instance</span>.<span class="variable">toJSONSafe</span>) {
+                    <span class="variable">instance</span> = <span class="variable">instance</span>.<span class="variable">toJSONSafe</span>();
+                } <span class="keyword">else</span> {
+                    <span class="variable">instance</span> = <span class="variable">instance</span>.<span class="variable">toJSON</span>()
+                }
+
+                <span class="variable">convertUnderscoreId</span>(<span class="variable">instance</span>);
+
+                <span class="keyword">var</span> <span class="variable">model</span> = <span class="string">'var '</span>+<span class="variable">var_name</span>+<span class="string">' = '</span>
+                          + <span class="string">'new '</span>+<span class="keyword">class</span>+<span class="string">'('</span> + <span class="class">JSON</span>.<span class="variable">stringify</span>(<span class="variable">instance</span>) + <span class="string">');'</span>;
+
+                <span class="keyword">return</span> <span class="variable">model</span>;
+            }
+        }
+
+      , <span class="variable">backboneCollection</span>: <span class="keyword">function</span> (<span class="variable">request</span>, <span class="variable">response</span>) {
+            <span class="keyword">return</span> <span class="keyword">function</span> (<span class="variable">resource</span>, <span class="variable">var_name</span>) {
+                <span class="keyword">var</span> <span class="variable">singular</span> = <span class="variable">lingo</span>.<span class="variable">singularize</span>(<span class="variable">resource</span>)
+                  , <span class="keyword">class</span> = <span class="variable">namespace</span> + <span class="variable">classify</span>(<span class="variable">singular</span>)
+                  , <span class="variable">instances</span> = <span class="variable">request</span>.<span class="variable">resource</span>(<span class="variable">resource</span>);
+
+                <span class="variable">var_name</span> = <span class="variable">var_name</span> || <span class="variable">resource</span>;
+
+                <span class="keyword">for</span> (<span class="keyword">var</span> <span class="variable">i</span> = <span class="number integer">0</span>, <span class="variable">l</span> = <span class="variable">instances</span>.<span class="variable">length</span>; <span class="variable">i</span> &<span class="variable">lt</span>; <span class="variable">l</span>; <span class="variable">i</span>++) {
+                    <span class="keyword">if</span> (<span class="variable">instances</span>[<span class="variable">i</span>].<span class="variable">toJSONSafe</span>) {
+                        <span class="variable">instances</span>[<span class="variable">i</span>] = <span class="variable">instances</span>[<span class="variable">i</span>].<span class="variable">toJSONSafe</span>();
+                    } <span class="keyword">else</span> {
+                        <span class="variable">instances</span>[<span class="variable">i</span>] = <span class="variable">instances</span>[<span class="variable">i</span>].<span class="variable">toJSON</span>()
+                    }
+
+                    <span class="variable">convertUnderscoreId</span>(<span class="variable">instances</span>[<span class="variable">i</span>]);
+                }
+
+                <span class="keyword">var</span> <span class="variable">collection</span> = <span class="string">'var '</span>+<span class="variable">var_name</span>+<span class="string">' = '</span>
+                               + <span class="string">'new '</span>+<span class="keyword">class</span>+<span class="string">'Collection('</span> + <span class="class">JSON</span>.<span class="variable">stringify</span>(<span class="variable">instances</span>) + <span class="string">');'</span>;
+
+                <span class="keyword">return</span> <span class="variable">collection</span>;
+            }
+        }
+
+    });
+}</code></pre>
+</td>
+</tr>
+<tr class="code">
+<td class="docs">
 <p>Generate backbone models and write to a file.</p>
 
 <h2></h2>
@@ -902,8 +1006,8 @@ e.g. "my_table" =&gt; "MyTable"</p>
 <ul><li><p><strong>param</strong>: <em>string</em>  file</p></li><li><p><strong>param</strong>: <em>string</em>  namespace (optional)</p></li><li><p><strong>api</strong>: <em>public</em></p></li></ul>
 </td>
 <td class="code">
-<pre><code><span class="variable">exports</span>.<span class="variable">generateFile</span> = <span class="keyword">function</span> (<span class="variable">file</span>, <span class="variable">namespace</span>) {
-    <span class="variable">fs</span>.<span class="variable">writeFileSync</span>(<span class="variable">file</span>, <span class="variable">exports</span>.<span class="variable">generate</span>(<span class="variable">namespace</span>));
+<pre><code><span class="variable">exports</span>.<span class="variable">generateFile</span> = <span class="keyword">function</span> (<span class="variable">app</span>, <span class="variable">file</span>, <span class="variable">namespace</span>) {
+    <span class="variable">fs</span>.<span class="variable">writeFileSync</span>(<span class="variable">file</span>, <span class="variable">exports</span>.<span class="variable">generate</span>(<span class="variable">app</span>, <span class="variable">namespace</span>));
 }</code></pre>
 </td>
 </tr>
@@ -919,16 +1023,16 @@ e.g. "my_table" =&gt; "MyTable"</p>
 <pre><code><span class="keyword">function</span> <span class="variable">backboneCommon</span> (<span class="variable">namespace</span>) {
     <span class="keyword">return</span> <span class="string">'var '</span>+<span class="variable">namespace</span>+<span class="string">'Model = Backbone.Model.extend({\n'</span>
          + <span class="string">'    set: function (attributes, options) {\n'</span>
-         + <span class="string">'        Backbone.Model.prototype.set.call(this,'</span>
-         + <span class="string">'            attributes, options);\n'</span>
+         + <span class="string">'        Backbone.Model.prototype.set.call(this, '</span>
+         +              <span class="string">'attributes, options);\n'</span>
          + <span class="string">'        this.pullEmbedded();\n'</span>
          + <span class="string">'    }\n'</span>
          + <span class="string">'  , pullEmbedded: function () {\n'</span>
          + <span class="string">'        for (var attr in this.attributes) {\n'</span>
          + <span class="string">'            if (this[attr] &amp;&amp; this[attr] instanceof Backbone.Collection) {\n'</span>
-         + <span class="string">'                for (var i = 0, models = [],\n'</span>
-         + <span class="string">'                        l = this.attributes[attr].length; i &lt; l; i++) {\n'</span>
-         + <span class="string">'                    models.push(this[attr].create(this.attributes[attr][i]));\n'</span>
+         + <span class="string">'                for (var i = 0, models = [], model = this[attr].model, '</span>
+         +                          <span class="string">'l = this.attributes[attr].length; i &lt; l; i++) {\n'</span>
+         + <span class="string">'                    models.push(new model(this.attributes[attr][i]));\n'</span>
          + <span class="string">'                }\n'</span>
          + <span class="string">'                this[attr].reset(models);\n'</span>
          + <span class="string">'                delete this.attributes[attr];\n'</span>
@@ -970,7 +1074,7 @@ e.g. "my_table" =&gt; "MyTable"</p>
 <td class="code">
 <pre><code><span class="keyword">function</span> <span class="variable">backboneTopLevelModel</span> (<span class="variable">namespace</span>, <span class="variable">resource</span>, <span class="variable">children</span>) {
     <span class="keyword">var</span> <span class="variable">singular</span> = <span class="variable">namespace</span> + <span class="variable">classify</span>(<span class="variable">lingo</span>.<span class="variable">singularize</span>(<span class="variable">resource</span>))
-      , <span class="variable">plural</span> = <span class="variable">namespace</span> + <span class="variable">classify</span>(<span class="variable">lingo</span>.<span class="variable">pluralize</span>(<span class="variable">resource</span>))
+      , <span class="variable">plural</span> = <span class="variable">lingo</span>.<span class="variable">pluralize</span>(<span class="variable">resource</span>)
       , <span class="variable">backbone</span> = <span class="string">''</span>;
 
     <span class="variable">backbone</span> += <span class="string">'var '</span>+<span class="variable">singular</span>+<span class="string">' = Model.extend({\n'</span>
@@ -982,7 +1086,7 @@ e.g. "my_table" =&gt; "MyTable"</p>
             <span class="variable">backbone</span> += <span class="string">'        this.'</span>+<span class="variable">em</span>.<span class="variable">attribute</span>+<span class="string">' = new '</span>
                       + <span class="variable">namespace</span> + <span class="variable">classify</span>(<span class="variable">em</span>.<span class="variable">singular</span>) + <span class="string">'Collection;\n'</span>
                       + <span class="string">'        this.'</span>+<span class="variable">em</span>.<span class="variable">attribute</span>+<span class="string">'.url = \'</span>/'+<span class="variable">plural</span>
-                      + <span class="string">'/\'</span> + <span class="this">this</span>.<span class="variable">id</span> + \<span class="string">'/'</span>+<span class="variable">namespace</span> +<span class="variable">classify</span>(<span class="variable">em</span>.<span class="variable">plural</span>)+<span class="string">'\'</span>\<span class="variable">n</span>';
+                      + <span class="string">'/\'</span> + <span class="this">this</span>.<span class="variable">id</span> + \<span class="string">'/'</span>+<span class="variable">em</span>.<span class="variable">plural</span>+<span class="string">'\'</span>\<span class="variable">n</span>';
         });
         <span class="variable">backbone</span> += <span class="string">'        this.pullEmbedded();\n'</span>
                   + <span class="string">'    }\n'</span>;
