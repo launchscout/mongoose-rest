@@ -7,6 +7,8 @@ require('./lib/request');
 
 module.exports = models;
 module.exports.createRoutes = rest.create;
+module.exports.id_format = rest.id_format;
+module.exports.createEmbeddedRoutes = rest.createEmbedded;
 module.exports.autoloadResources = rest.autoloadResources;
 module.exports.generateBackbone = backbone.generate;
 module.exports.backboneHelpers = backbone.helpers;
