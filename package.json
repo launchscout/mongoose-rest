@@ -1,9 +1,9 @@
 {
   "author": "Chris O'Hara <cohara87@gmail.com>",
   "name": "mongoose-rest",
-  "description": "RESTful, resource-based routes for Mongoose",
+  "description": "Introspection, Backbone models and RESTful routes for Mongoose",
   "homepage": "http://github.com/chriso/mongoose-rest",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "engines": {
     "node": ">= 0.4.0"
   },
@@ -20,6 +20,6 @@
     "url": "http://github.com/chriso/mongoose-rest/raw/master/LICENSE"
   }],
   "dependencies": {
-    "lingo": ">= 0.0.3"
+    "lingo": "*"
   }
 }
