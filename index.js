@@ -5,13 +5,13 @@ var models = require('./lib/models')
 //Patch IncomingMessage.prototype
 require('./lib/request');
 
-module.exports = models;
-module.exports.createRoutes = rest.create;
-module.exports.id_format = rest.id_format;
-module.exports.createEmbeddedRoutes = rest.createEmbedded;
-module.exports.getRoutes = rest.getRoutes;
-module.exports.autoloadResources = rest.autoloadResources;
-module.exports.generateBackbone = backbone.generate;
-module.exports.backboneHelpers = backbone.helpers;
-module.exports.generateBackboneFile = backbone.generateFile;
+exports.use = function (app, mongoose) {
+    models.use(mongoose)
+    rest.autoloadResources(app)
+    backbone.helpers(app)
+}
+
+exports.routes = rest.routes
+
+module.exports.backbone = backbone.generateFile
 
