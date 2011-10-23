@@ -3,13 +3,13 @@
   "name": "mongoose-rest",
   "description": "Introspection, Backbone models and RESTful routes for Mongoose",
   "homepage": "http://github.com/chriso/mongoose-rest",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "engines": {
     "node": ">= 0.4.0"
   },
   "bugs": {
     "mail": "cohara87@gmail.com",
-    "web": "http://github.com/chriso/mongoose-rest/issues"
+    "url": "http://github.com/chriso/mongoose-rest/issues"
   },
   "repository": {
     "type": "git",
